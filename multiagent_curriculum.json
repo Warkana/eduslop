@@ -1274,22 +1274,246 @@
         {
           "id": 30,
           "topic": "Research agent",
-          "outcome": "Orchestrator + пошук + синтез → звіт"
+          "outcome": "Orchestrator + пошук + синтез → звіт",
+          "instruction": {
+            "description": "Фінальний проект першого типу: побудова research agent, який отримує тему, розбиває її на підзапити, паралельно «шукає» інформацію через tool calls, а потім синтезує структурований звіт. Урок закріплює orchestrator-worker патерн, роботу з інструментами та форматований вивід.",
+            "duration_minutes": 90,
+            "key_concepts": [
+              "research agent",
+              "orchestrator",
+              "worker agent",
+              "web search tool",
+              "synthesis",
+              "structured output",
+              "multi-step reasoning",
+              "parallel tool calls"
+            ],
+            "theory": [
+              {
+                "title": "Архітектура research agent",
+                "content": "Research agent складається з трьох рівнів: (1) Planner — розбиває тему на 3–5 конкретних підзапитів; (2) Searchers — worker-агенти, кожен виконує один підзапит через search tool; (3) Synthesizer — orchestrator отримує всі результати і формує фінальний звіт. Такий поділ дозволяє паралельно виконувати пошук і чітко контролювати якість кожного кроку."
+              },
+              {
+                "title": "Orchestrator-worker з пошуком",
+                "content": "Orchestrator викликає search tool (або sub-agent) для кожного підзапиту. У реальній системі search tool звертається до зовнішнього API (Tavily, Brave, SerpAPI). У навчальному прикладі використовується mock-функція, що повертає зафіксовані дані. Orchestrator не шукає сам — він делегує і чекає результатів. Після отримання всіх відповідей він передає їх синтезатору."
+              },
+              {
+                "title": "Синтез та структурування звіту",
+                "content": "Синтезатор отримує масив знайдених фактів і формує зв'язний звіт з розділами: Вступ, Ключові факти (bullet list), Висновок. Для надійного форматування використовують system prompt із чітким шаблоном або tool use з JSON-схемою. Structured output через інструмент гарантує, що фінальний документ завжди матиме однаковий вигляд — незалежно від обсягу знайденої інформації."
+              }
+            ],
+            "examples": [
+              {
+                "title": "Research agent: planner → searchers → synthesizer",
+                "language": "python",
+                "code": "import anthropic\nimport json\n\nclient = anthropic.Anthropic()\n\n# Mock search tool\ndef search(query: str) -> str:\n    mock_results = {\n        \"multiagent systems\": \"Multiagent systems consist of multiple AI agents that communicate and collaborate.\",\n        \"agent communication\": \"Agents exchange messages via shared memory or direct API calls.\",\n        \"agent coordination\": \"Coordination strategies include centralized orchestration and peer-to-peer negotiation.\",\n    }\n    for key in mock_results:\n        if key in query.lower():\n            return mock_results[key]\n    return f\"No specific results found for: {query}\"\n\nsearch_tool = {\n    \"name\": \"search\",\n    \"description\": \"Search the web for information on a given query\",\n    \"input_schema\": {\n        \"type\": \"object\",\n        \"properties\": {\n            \"query\": {\"type\": \"string\", \"description\": \"Search query\"}\n        },\n        \"required\": [\"query\"]\n    }\n}\n\ndef research_agent(topic: str) -> str:\n    # Step 1: Planner generates sub-queries\n    plan_response = client.messages.create(\n        model=\"claude-haiku-4-5-20251001\",\n        max_tokens=300,\n        system=\"Generate exactly 3 search queries to research the given topic. Return as JSON array of strings.\",\n        messages=[{\"role\": \"user\", \"content\": f\"Topic: {topic}\"}]\n    )\n    queries = json.loads(plan_response.content[0].text)\n    print(f\"Queries: {queries}\")\n\n    # Step 2: Search workers (sequential for simplicity; use asyncio for parallel)\n    search_results = []\n    for query in queries:\n        result = search(query)\n        search_results.append(f\"Query: {query}\\nResult: {result}\")\n\n    # Step 3: Synthesizer produces structured report\n    context = \"\\n\\n\".join(search_results)\n    synthesis = client.messages.create(\n        model=\"claude-sonnet-4-6\",\n        max_tokens=600,\n        system=\"You are a report writer. Based on search results, write a structured report with: Introduction, Key Facts (bullet list), Conclusion.\",\n        messages=[{\"role\": \"user\", \"content\": f\"Topic: {topic}\\n\\nSearch results:\\n{context}\"}]\n    )\n    return synthesis.content[0].text\n\nreport = research_agent(\"multiagent systems\")\nprint(report)"
+              }
+            ],
+            "exercise": {
+              "title": "Повний research agent з паралельним пошуком",
+              "task": "1. Реалізуй planner-агента, який для заданої теми генерує рівно 3 пошукових підзапити через Claude (повертає JSON-масив).\n2. Додай реальний або mock search tool і виконай всі 3 запити паралельно за допомогою asyncio.gather().\n3. Передай усі результати synthesizer-агенту, який формує звіт з розділами: Вступ, Ключові факти, Висновок.\n4. Протестуй на темі 'LLM memory mechanisms' — перевір, що звіт містить усі три розділи.",
+              "hints": [
+                "Для паралельного пошуку використовуй asyncio та anthropic.AsyncAnthropic()",
+                "Planner може повернути невалідний JSON — обгорни json.loads() у try/except і fallback до ['query 1', 'query 2', 'query 3']",
+                "Synthesizer отримує великий контекст — обмеж кожен search result до 300 символів, щоб не перевищити ліміт токенів"
+              ]
+            },
+            "resources": [
+              {
+                "title": "Anthropic — Tool use overview",
+                "type": "docs",
+                "url": "https://docs.anthropic.com/en/docs/build-with-claude/tool-use/overview"
+              },
+              {
+                "title": "Anthropic — Building effective agents",
+                "type": "article",
+                "url": "https://www.anthropic.com/research/building-effective-agents"
+              }
+            ]
+          }
         },
         {
           "id": 31,
           "topic": "Parallel code review",
-          "outcome": "PR → паралельні subagents → фінальний огляд"
+          "outcome": "PR → паралельні subagents → фінальний огляд",
+          "instruction": {
+            "description": "Проект демонструє fan-out/fan-in патерн: diff пул-реквесту одночасно аналізують кілька спеціалізованих reviewer-агентів (безпека, стиль, логіка), а потім aggregator-агент об'єднує їхні зауваження у фінальний огляд. Урок закріплює паралельні LLM-виклики та агрегацію результатів.",
+            "duration_minutes": 90,
+            "key_concepts": [
+              "fan-out/fan-in",
+              "parallel subagents",
+              "code review",
+              "concurrent LLM calls",
+              "result aggregation",
+              "asyncio",
+              "specialization",
+              "severity ranking"
+            ],
+            "theory": [
+              {
+                "title": "Fan-out/fan-in патерн",
+                "content": "Fan-out: orchestrator розсилає одне завдання (diff) кільком спеціалізованим агентам одночасно. Fan-in: orchestrator чекає на всі відповіді та збирає їх разом. Перевага над послідовним виконанням — час визначається найповільнішим агентом, а не сумою часів усіх. Для Python це реалізується через asyncio.gather(), для синхронного коду — через concurrent.futures.ThreadPoolExecutor."
+              },
+              {
+                "title": "Спеціалізація reviewer-агентів",
+                "content": "Кожен reviewer отримує той самий diff, але різний system prompt, що фокусує його увагу: security-reviewer шукає ін'єкції та небезпечні виклики; style-reviewer перевіряє іменування, довжину функцій, дублювання; logic-reviewer аналізує граничні випадки, помилки у алгоритмах, відсутні перевірки. Спеціалізація підвищує глибину аналізу в кожній категорії порівняно з одним загальним reviewer."
+              },
+              {
+                "title": "Агрегація та ранжування зауважень",
+                "content": "Aggregator отримує відповіді всіх reviewers і виконує дві задачі: дедублікацію (одна й та сама проблема, знайдена кількома агентами, згадується один раз) та ранжування за severity (critical → major → minor). Aggregator може сам бути LLM-агентом, або простою детермінованою функцією, що парсить JSON-відповіді reviewers."
+              }
+            ],
+            "examples": [
+              {
+                "title": "Паралельний code review з asyncio та aggregator",
+                "language": "python",
+                "code": "import asyncio\nimport anthropic\n\nclient = anthropic.AsyncAnthropic()\n\nSAMPLE_DIFF = \"\"\"\n+def get_user(user_id):\n+    query = f\"SELECT * FROM users WHERE id = {user_id}\"\n+    return db.execute(query)\n+\n+def processData(data):\n+    result=[]\n+    for i in range(0,len(data),1):\n+        result.append(data[i]*2)\n+    return result\n\"\"\"\n\nREVIEWERS = [\n    (\"security\", \"You are a security code reviewer. Find SQL injections, XSS, unsafe operations. Be concise.\"),\n    (\"style\",    \"You are a style code reviewer. Find naming issues, redundant code, poor readability. Be concise.\"),\n    (\"logic\",    \"You are a logic code reviewer. Find algorithmic inefficiencies, missing edge cases. Be concise.\"),\n]\n\nasync def review(role: str, system: str, diff: str) -> tuple[str, str]:\n    response = await client.messages.create(\n        model=\"claude-haiku-4-5-20251001\",\n        max_tokens=300,\n        system=system,\n        messages=[{\"role\": \"user\", \"content\": f\"Review this diff:\\n{diff}\"}]\n    )\n    return role, response.content[0].text\n\nasync def aggregate(reviews: list[tuple[str, str]], diff: str) -> str:\n    context = \"\\n\\n\".join(f\"[{role.upper()}]\\n{text}\" for role, text in reviews)\n    response = await client.messages.create(\n        model=\"claude-sonnet-4-6\",\n        max_tokens=500,\n        system=\"You are a senior engineer. Merge the following specialized reviews into one final review. Remove duplicates. Rank issues: CRITICAL > MAJOR > MINOR.\",\n        messages=[{\"role\": \"user\", \"content\": f\"Diff:\\n{diff}\\n\\nSpecialized reviews:\\n{context}\"}]\n    )\n    return response.content[0].text\n\nasync def parallel_code_review(diff: str) -> str:\n    tasks = [review(role, system, diff) for role, system in REVIEWERS]\n    results = await asyncio.gather(*tasks)\n    return await aggregate(list(results), diff)\n\nfinal_review = asyncio.run(parallel_code_review(SAMPLE_DIFF))\nprint(final_review)"
+              }
+            ],
+            "exercise": {
+              "title": "4-агентний паралельний code review",
+              "task": "1. Додай четвертого reviewer — performance-reviewer (шукає N+1 запити, зайві цикли, неефективні структури даних).\n2. Змусь кожного reviewer повертати структурований JSON: {\"issues\": [{\"severity\": \"critical|major|minor\", \"line\": \"...\", \"description\": \"...\"}]}.\n3. Aggregator має парсити JSON від кожного reviewer та будувати зведену таблицю у форматі Markdown.\n4. Виміряй час виконання паралельного vs послідовного запуску тих самих 4 агентів.",
+              "hints": [
+                "Для JSON-відповідей додай у system prompt: 'Respond ONLY with valid JSON matching the schema {\"issues\": [...]}'",
+                "Якщо reviewer повертає не-JSON, обгорни парсинг у try/except та встанови issues=[] як fallback",
+                "Для вимірювання часу використовуй asyncio.get_event_loop().time() або time.perf_counter()"
+              ]
+            },
+            "resources": [
+              {
+                "title": "Anthropic — Multi-agent orchestration",
+                "type": "docs",
+                "url": "https://docs.anthropic.com/en/docs/build-with-claude/agentic-loop"
+              },
+              {
+                "title": "Python asyncio — офіційна документація",
+                "type": "docs",
+                "url": "https://docs.python.org/3/library/asyncio.html"
+              }
+            ]
+          }
         },
         {
           "id": 32,
           "topic": "Data pipeline agent",
-          "outcome": "Читання → трансформація → звітування"
+          "outcome": "Читання → трансформація → звітування",
+          "instruction": {
+            "description": "Проект будує агентний ETL-конвеєр: агент послідовно читає CSV, валідує дані через tool, трансформує записи та генерує підсумковий звіт. Урок закріплює sequential pipeline патерн, обробку помилок між кроками та структурований вивід.",
+            "duration_minutes": 90,
+            "key_concepts": [
+              "ETL pipeline",
+              "data validation",
+              "sequential agents",
+              "tool chaining",
+              "error handling",
+              "data transformation",
+              "reporting",
+              "pipeline state"
+            ],
+            "theory": [
+              {
+                "title": "Pipeline архітектура агентів",
+                "content": "В pipeline-архітектурі кожен агент (або tool) виконує одну чітку функцію і передає результат наступному. На відміну від паралельного fan-out, тут кроки залежать один від одного: трансформація неможлива без валідації, а звіт — без трансформованих даних. Стан pipeline зберігається в об'єкті PipelineState, який передається між кроками. Це полегшує налагодження: можна зупинити pipeline на будь-якому кроці та переглянути проміжний стан."
+              },
+              {
+                "title": "Валідація та трансформація як окремі агенти",
+                "content": "Validator-агент отримує сирі дані та повертає звіт: список помилок (missing fields, wrong types, out-of-range values) і список валідних записів. Transformer-агент отримує тільки валідні записи та застосовує правила: нормалізація полів, обчислення похідних метрик, збагачення зовнішніми даними. Розділення ролей гарантує, що трансформатор ніколи не отримає некоректних даних."
+              },
+              {
+                "title": "Звітування та підсумки",
+                "content": "Reporter-агент отримує трансформовані дані та метадані pipeline (кількість оброблених/відхилених записів, час виконання) і формує структурований звіт. Звіт може бути Markdown, JSON або HTML залежно від цільового використання. Для регулярних pipeline важливо зберігати audit log — запис того, які дані пройшли та які були відхилені, з причинами."
+              }
+            ],
+            "examples": [
+              {
+                "title": "4-кроковий data pipeline agent",
+                "language": "python",
+                "code": "import anthropic\nimport csv, io, json\nfrom dataclasses import dataclass, field\n\nclient = anthropic.Anthropic()\n\nRAW_CSV = \"\"\"name,amount,category\nAlice,150,food\nBob,-20,food\nCarol,300,tech\n,50,food\nDave,200,\n\"\"\"\n\n@dataclass\nclass PipelineState:\n    raw: str = \"\"\n    records: list = field(default_factory=list)\n    valid: list = field(default_factory=list)\n    errors: list = field(default_factory=list)\n    transformed: list = field(default_factory=list)\n    report: str = \"\"\n\ndef read_csv(state: PipelineState) -> PipelineState:\n    reader = csv.DictReader(io.StringIO(state.raw))\n    state.records = list(reader)\n    print(f\"Read {len(state.records)} records\")\n    return state\n\ndef validate(state: PipelineState) -> PipelineState:\n    prompt = f\"Validate these CSV records. Rules: name required, amount must be positive number, category required. Return JSON: {{\\\"valid\\\": [...], \\\"errors\\\": [{{\\\"record\\\": ..., \\\"reason\\\": ...}}]}}\\n\\nRecords: {json.dumps(state.records)}\"\n    response = client.messages.create(\n        model=\"claude-haiku-4-5-20251001\",\n        max_tokens=500,\n        messages=[{\"role\": \"user\", \"content\": prompt}]\n    )\n    result = json.loads(response.content[0].text)\n    state.valid = result[\"valid\"]\n    state.errors = result[\"errors\"]\n    print(f\"Valid: {len(state.valid)}, Errors: {len(state.errors)}\")\n    return state\n\ndef transform(state: PipelineState) -> PipelineState:\n    prompt = f\"Transform these records: add 'amount_uah' field (amount * 41.5), capitalize 'name', uppercase 'category'. Return JSON array.\\n\\nRecords: {json.dumps(state.valid)}\"\n    response = client.messages.create(\n        model=\"claude-haiku-4-5-20251001\",\n        max_tokens=500,\n        messages=[{\"role\": \"user\", \"content\": prompt}]\n    )\n    state.transformed = json.loads(response.content[0].text)\n    return state\n\ndef report(state: PipelineState) -> PipelineState:\n    summary = {\"total\": len(state.records), \"valid\": len(state.valid), \"errors\": len(state.errors), \"data\": state.transformed}\n    prompt = f\"Write a brief Markdown report for this data pipeline run: {json.dumps(summary)}\"\n    response = client.messages.create(\n        model=\"claude-sonnet-4-6\",\n        max_tokens=400,\n        messages=[{\"role\": \"user\", \"content\": prompt}]\n    )\n    state.report = response.content[0].text\n    return state\n\nstate = PipelineState(raw=RAW_CSV)\nfor step in [read_csv, validate, transform, report]:\n    state = step(state)\n\nprint(state.report)"
+              }
+            ],
+            "exercise": {
+              "title": "Data pipeline agent для CSV з продажами",
+              "task": "1. Створи CSV-файл з 10 записами продажів: columns = [date, product, quantity, price, region]. Введи навмисні помилки: від'ємна кількість, відсутній регіон, некоректна дата.\n2. Реалізуй validator-агент, який повертає JSON зі списком валідних записів та описом кожної помилки.\n3. Реалізуй transformer-агент, який обчислює total_revenue = quantity * price і класифікує продажі на 'high' (>500) / 'low' (<=500).\n4. Reporter-агент формує Markdown звіт: загальна виручка, топ-3 продукти, кількість відхилених записів.",
+              "hints": [
+                "Зберігай PipelineState між кроками — це дозволить легко налагоджувати кожен крок окремо",
+                "Якщо validator повертає не-JSON, використовуй регулярний вираз для вилучення JSON-блоку з відповіді",
+                "Для реального CSV використовуй open('sales.csv', encoding='utf-8') замість рядкового літерала"
+              ]
+            },
+            "resources": [
+              {
+                "title": "Anthropic — Tool use: chaining tools",
+                "type": "docs",
+                "url": "https://docs.anthropic.com/en/docs/build-with-claude/tool-use/overview"
+              },
+              {
+                "title": "Python csv module — офіційна документація",
+                "type": "docs",
+                "url": "https://docs.python.org/3/library/csv.html"
+              }
+            ]
+          }
         },
         {
           "id": 33,
           "topic": "Multi-domain support",
-          "outcome": "Router → спеціалізовані агенти per domain"
+          "outcome": "Router → спеціалізовані агенти per domain",
+          "instruction": {
+            "description": "Фінальний проект курсу: система підтримки клієнтів, де router-агент класифікує вхідний запит і маршрутизує його до одного зі спеціалізованих агентів — billing, technical або general. Урок закріплює router патерн, класифікацію інтентів і graceful fallback.",
+            "duration_minutes": 90,
+            "key_concepts": [
+              "router pattern",
+              "intent classification",
+              "domain specialization",
+              "handoff",
+              "fallback strategy",
+              "system prompt engineering",
+              "multi-agent dispatch",
+              "confidence threshold"
+            ],
+            "theory": [
+              {
+                "title": "Router-агент та класифікація інтенту",
+                "content": "Router-агент — це перша точка входу системи. Він не вирішує задачу самостійно, а лише класифікує запит: до якого домену він належить і з якою впевненістю. Найпростіша реалізація — LLM з system prompt, що повертає JSON {\"domain\": \"billing|technical|general\", \"confidence\": 0.0–1.0}. Якщо confidence < порогу (наприклад 0.7) — router може попросити уточнення або передати до general-агента."
+              },
+              {
+                "title": "Спеціалізовані агенти per domain",
+                "content": "Кожен доменний агент отримує той самий запит користувача, але разом із ним — повний контекст домену через system prompt. Billing-агент знає про тарифи, рахунки, повернення коштів. Technical-агент знає про поширені помилки, кроки налагодження. General-агент — широкий, але поверхневий. Важливо: агент повинен знати межі своїх повноважень і явно відмовляти в запитах поза своїм доменом (наприклад, billing-агент не вирішує технічні питання)."
+              },
+              {
+                "title": "Handoff та fallback стратегії",
+                "content": "Handoff — передача контексту між агентами без втрати інформації. При маршрутизації router передає не лише запит, але й всю попередню переписку (якщо є). Fallback — що робити, коли класифікація невизначена або агент не може відповісти: (1) перекласифікувати з іншим prompt; (2) передати до general-агента; (3) ескалювати до людини. Система без fallback часто «зависає» або дає безглузді відповіді на граничних випадках."
+              }
+            ],
+            "examples": [
+              {
+                "title": "Multi-domain support router з трьома спеціалізованими агентами",
+                "language": "python",
+                "code": "import anthropic\nimport json\n\nclient = anthropic.Anthropic()\n\nDOMAIN_PROMPTS = {\n    \"billing\": \"You are a billing support specialist. Help with invoices, payments, subscriptions, and refunds. If the issue is not billing-related, say so and suggest the right department.\",\n    \"technical\": \"You are a technical support specialist. Help with bugs, errors, configuration, and integrations. If the issue is not technical, say so and suggest the right department.\",\n    \"general\": \"You are a general support agent. Handle greetings, account questions, and any topic not covered by billing or technical support.\",\n}\n\ndef classify(query: str) -> tuple[str, float]:\n    response = client.messages.create(\n        model=\"claude-haiku-4-5-20251001\",\n        max_tokens=100,\n        system='Classify the support query. Return ONLY valid JSON: {\"domain\": \"billing|technical|general\", \"confidence\": 0.0-1.0}',\n        messages=[{\"role\": \"user\", \"content\": query}]\n    )\n    try:\n        result = json.loads(response.content[0].text)\n        return result[\"domain\"], result[\"confidence\"]\n    except (json.JSONDecodeError, KeyError):\n        return \"general\", 0.5\n\ndef handle(domain: str, query: str) -> str:\n    system = DOMAIN_PROMPTS.get(domain, DOMAIN_PROMPTS[\"general\"])\n    response = client.messages.create(\n        model=\"claude-sonnet-4-6\",\n        max_tokens=400,\n        system=system,\n        messages=[{\"role\": \"user\", \"content\": query}]\n    )\n    return response.content[0].text\n\ndef support_system(query: str, confidence_threshold: float = 0.7) -> str:\n    domain, confidence = classify(query)\n    print(f\"Classified as '{domain}' (confidence: {confidence:.2f})\")\n    if confidence < confidence_threshold:\n        print(\"Low confidence — routing to general\")\n        domain = \"general\"\n    return handle(domain, query)\n\n# Test queries\nqueries = [\n    \"My invoice shows a double charge for last month.\",\n    \"The API returns 429 errors when I send more than 10 requests.\",\n    \"What are your business hours?\",\n]\n\nfor q in queries:\n    print(f\"\\nQuery: {q}\")\n    print(f\"Response: {support_system(q)}\\n{'—'*60}\")"
+              }
+            ],
+            "exercise": {
+              "title": "3-доменна support система з роутером та fallback",
+              "task": "1. Розшир систему четвертим доменом — 'sales' (запити про ціни, плани, знижки). Додай відповідний system prompt для sales-агента.\n2. Реалізуй multi-turn підтримку: зберігай conversation history і передавай її доменному агенту разом із новим запитом.\n3. Додай ескалацію: якщо доменний агент відповідає 'I cannot help with this', router має спробувати інший домен (максимум 2 спроби), після чого повернути повідомлення про ескалацію до людини.\n4. Протестуй граничні випадки: багатомовний запит, порожній рядок, запит що стосується двох доменів одночасно.",
+              "hints": [
+                "Для multi-turn збережи messages як список і додавай {\"role\": \"user\", \"content\": query} та {\"role\": \"assistant\", \"content\": response} після кожного раунду",
+                "Для виявлення відмови агента перевіряй наявність ключових фраз у відповіді: 'cannot help', 'not my domain', 'please contact' — без LLM-виклику",
+                "Тест з порожнім рядком має повертати ввічливе прохання уточнити запит — переконайся, що router не падає з помилкою"
+              ]
+            },
+            "resources": [
+              {
+                "title": "Anthropic — Multi-agent systems overview",
+                "type": "docs",
+                "url": "https://docs.anthropic.com/en/docs/build-with-claude/agentic-loop"
+              },
+              {
+                "title": "Anthropic — Orchestrating agents (cookbook)",
+                "type": "article",
+                "url": "https://github.com/anthropics/anthropic-cookbook/tree/main/multiagent_orchestrator"
+              }
+            ]
+          }
         }
       ]
     }
